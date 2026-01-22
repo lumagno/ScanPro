@@ -13,13 +13,14 @@ interface ItemPatrimonioDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun inserirItem(item: ItemPatrimonio)
 
-    // --- NOVOS MÉTODOS NECESSÁRIOS ---
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun inserirTudo(itens: List<ItemPatrimonio>)
 
     @Query("SELECT COUNT(*) FROM tabela_itens")
     suspend fun contarItens(): Int
-    // ---------------------------------
+
+    @Query("DELETE FROM tabela_itens")
+    suspend fun deletarTodosItens()
 
     @Delete
     suspend fun deletarItem(item: ItemPatrimonio)

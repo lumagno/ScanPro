@@ -21,6 +21,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.scanproutfpr.data.ItemPatrimonio
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -253,51 +255,104 @@ fun TabConsulta(
 ) {
     val context = LocalContext.current
     var textoPesquisa by remember { mutableStateOf("") }
+    var mostrarCamera by remember { mutableStateOf(false) }
 
-    val listaFiltrada = if (textoPesquisa.isBlank()) {
-        listaItens
-    } else {
-        listaItens.filter { item ->
-            item.tombo.contains(textoPesquisa, ignoreCase = true) ||
-                    item.descricao.contains(textoPesquisa, ignoreCase = true) ||
-                    item.caracteristica.contains(textoPesquisa, ignoreCase = true) || // Pesquisa também na característica
-                    item.responsavel.contains(textoPesquisa, ignoreCase = true) ||
-                    item.local.contains(textoPesquisa, ignoreCase = true)
+    // Launcher para importar novo JSON
+    val launcherImportacao = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: android.net.Uri? ->
+        uri?.let { viewModel.importarNovoJson(context, it) }
+    }
+
+    // LÓGICA DE FILTRAGEM
+    val listaFiltrada = listaItens.filter { item ->
+        val termo = textoPesquisa.uppercase().trim()
+        if (termo.isEmpty()) {
+            !item.localUltimaAuditoria.isNullOrBlank()
+        } else {
+            item.tombo.contains(termo, ignoreCase = true)
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
-                value = textoPesquisa,
-                onValueChange = { textoPesquisa = it.uppercase() },
-                placeholder = { Text("PESQUISAR...") },
-                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-                trailingIcon = {
-                    if (textoPesquisa.isNotEmpty()) {
-                        IconButton(onClick = { textoPesquisa = "" }) { Icon(Icons.Filled.Close, contentDescription = "Limpar") }
+    if (mostrarCamera) {
+        // Reutiliza o componente de câmera para ler o tombo
+        CameraPreviewScreen(
+            onCodigoLido = { codigo ->
+                textoPesquisa = codigo.uppercase().trim()
+                mostrarCamera = false
+            },
+            onFechar = { mostrarCamera = false }
+        )
+    } else {
+        Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+            // Barra de Ações com Pesquisa, Câmera e Importação
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = textoPesquisa,
+                    onValueChange = { textoPesquisa = it.uppercase() },
+                    placeholder = { Text("PESQUISAR POR TOMBO") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                    trailingIcon = {
+                        Row {
+                            if (textoPesquisa.isNotEmpty()) {
+                                IconButton(onClick = { textoPesquisa = "" }) {
+                                    Icon(Icons.Filled.Close, contentDescription = "Limpar")
+                                }
+                            }
+                            // ÍCONE DA CÂMERA PARA PESQUISA
+                            IconButton(onClick = { mostrarCamera = true }) {
+                                Icon(Icons.Filled.CameraAlt, contentDescription = "Pesquisar com Câmera")
+                            }
+                        }
                     }
-                },
-                modifier = Modifier.weight(1f),
-                singleLine = true
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            IconButton(onClick = { exportarECompartilharCsv(context, listaFiltrada) }) {
-                Icon(Icons.Filled.Share, contentDescription = "Exportar CSV")
+                )
+
+                IconButton(onClick = { launcherImportacao.launch("application/json") }) {
+                    Icon(Icons.Filled.FileDownload, contentDescription = "Importar JSON")
+                }
+
+                IconButton(onClick = { exportarECompartilharCsv(context, listaFiltrada) }) {
+                    Icon(Icons.Filled.Share, contentDescription = "Exportar CSV")
+                }
             }
-        }
 
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(text = "RESULTADOS: ${listaFiltrada.size}", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
+            Spacer(modifier = Modifier.height(16.dp))
 
-        Box(modifier = Modifier.weight(1f)) {
-            ItensList(
-                itens = listaFiltrada,
-                onDelete = { viewModel.apagarItem(it) },
-                onEdit = onEditarItem
+            Text(
+                text = if (textoPesquisa.isEmpty())
+                    "EXIBINDO: ITENS RASTREADOS"
+                else "BUSCANDO TOMBO: $textoPesquisa",
+                style = MaterialTheme.typography.labelMedium,
+                color = if (textoPesquisa.isEmpty()) Color(0xFF2E7D32) else MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold
             )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Box(modifier = Modifier.weight(1f)) {
+                if (listaFiltrada.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(
+                            text = if (textoPesquisa.isEmpty())
+                                "Nenhum item rastreado ainda."
+                            else "Tombo não encontrado no banco.",
+                            textAlign = TextAlign.Center,
+                            color = Color.Gray
+                        )
+                    }
+                } else {
+                    ItensList(
+                        itens = listaFiltrada,
+                        onDelete = { viewModel.apagarItem(it) },
+                        onEdit = onEditarItem
+                    )
+                }
+            }
+
+            DeveloperFooter()
         }
-        DeveloperFooter()
     }
 }
 
