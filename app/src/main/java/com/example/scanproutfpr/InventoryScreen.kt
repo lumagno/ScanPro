@@ -155,7 +155,8 @@ fun TabCadastro(viewModel: MainViewModel) {
     if (mostrarCamera) {
         CameraPreviewScreen(
             onCodigoLido = { codigo ->
-                codigoLidoTemporario = codigo
+                // Filtra apenas números do código lido pela câmera também
+                codigoLidoTemporario = codigo.filter { it.isDigit() }
                 mostrarCamera = false
                 mostrarDialogoConfirmacao = true
             },
@@ -174,11 +175,20 @@ fun TabCadastro(viewModel: MainViewModel) {
             Row(modifier = Modifier.fillMaxWidth()) {
                 OutlinedTextField(
                     value = tombo,
-                    onValueChange = { tombo = it.uppercase() },
+                    onValueChange = { novoValor ->
+                        // REGRA: Permite apenas números (0-9)
+                        if (novoValor.all { it.isDigit() }) {
+                            tombo = novoValor
+                        }
+                    },
                     label = { Text("TOMBO ATUAL") },
                     modifier = Modifier.weight(1f),
                     singleLine = true,
-                    isError = mostrarErroDuplicado
+                    isError = mostrarErroDuplicado,
+                    // ABRE O TECLADO NUMÉRICO AUTOMATICAMENTE
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                    )
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 IconButton(
@@ -190,7 +200,12 @@ fun TabCadastro(viewModel: MainViewModel) {
             }
 
             Spacer(modifier = Modifier.height(8.dp))
-            OutlinedTextField(value = descricao, onValueChange = { descricao = it.uppercase() }, label = { Text("DESCRIÇÃO") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(
+                value = descricao,
+                onValueChange = { descricao = it.uppercase() },
+                label = { Text("DESCRIÇÃO") },
+                modifier = Modifier.fillMaxWidth()
+            )
 
             // NOVO CAMPO: CARACTERÍSTICA
             Spacer(modifier = Modifier.height(8.dp))
