@@ -378,28 +378,53 @@ fun TabAuditoria(listaItens: List<ItemPatrimonio>, viewModel: MainViewModel) {
     var itemEncontrado by remember { mutableStateOf<ItemPatrimonio?>(null) }
     var codigoLidoSemSucesso by remember { mutableStateOf<String?>(null) }
     var mostrarDialogo by remember { mutableStateOf(false) }
+    var jaProcessouCodigo by remember { mutableStateOf(false) }
 
     fun auditarCodigo(codigo: String) {
-        val item = listaItens.find { it.tombo == codigo }
-        if (item != null) {
+        val itemOriginal = listaItens.find { it.tombo == codigo }
+
+        if (itemOriginal != null) {
             if (localAuditoria.isNotBlank()) {
-                val itemAtualizado = item.copy(localUltimaAuditoria = localAuditoria)
-                viewModel.atualizarItem(itemAtualizado)
-                itemEncontrado = itemAtualizado
+                val jaFoiAuditado = listaItens.any {
+                    it.tombo == codigo && !it.localUltimaAuditoria.isNullOrBlank()
+                }
+
+                val localFinal = if (jaFoiAuditado) {
+                    "$localAuditoria (DUPLICADO)"
+                } else {
+                    localAuditoria
+                }
+
+                val itemDuplicado = itemOriginal.copy(
+                    id = 0,
+                    localUltimaAuditoria = localFinal
+                )
+
+                viewModel.salvarCopiaItem(itemDuplicado)
+                itemEncontrado = itemDuplicado
             } else {
-                itemEncontrado = item
+                itemEncontrado = itemOriginal
             }
             codigoLidoSemSucesso = null
         } else {
             itemEncontrado = null
             codigoLidoSemSucesso = codigo
         }
+
         mostrarDialogo = true
         mostrarCamera = false
     }
 
     if (mostrarCamera) {
-        CameraPreviewScreen(onCodigoLido = { auditarCodigo(it) }, onFechar = { mostrarCamera = false })
+        CameraPreviewScreen(
+            onCodigoLido = { codigo ->
+                if (!jaProcessouCodigo) {
+                    jaProcessouCodigo = true
+                    auditarCodigo(codigo)
+                }
+            },
+            onFechar = { mostrarCamera = false }
+        )
     } else {
         Column(
             modifier = Modifier.fillMaxSize().padding(24.dp),
@@ -410,7 +435,7 @@ fun TabAuditoria(listaItens: List<ItemPatrimonio>, viewModel: MainViewModel) {
             Spacer(modifier = Modifier.height(24.dp))
             Text("MODO AUDITORIA", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(8.dp))
-            Text("Insira o local abaixo para atualizar o rastreamento.", textAlign = TextAlign.Center, color = Color.Gray)
+            Text("Itens repetidos serão marcados como (DUPLICADO).", textAlign = TextAlign.Center, color = Color.Gray)
             Spacer(modifier = Modifier.height(32.dp))
             OutlinedTextField(
                 value = localAuditoria,
@@ -420,7 +445,13 @@ fun TabAuditoria(listaItens: List<ItemPatrimonio>, viewModel: MainViewModel) {
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(16.dp))
-            Button(onClick = { mostrarCamera = true }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+            Button(
+                onClick = {
+                    jaProcessouCodigo = false
+                    mostrarCamera = true
+                },
+                modifier = Modifier.fillMaxWidth().height(56.dp)
+            ) {
                 Icon(Icons.Filled.CameraAlt, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("ESCANEAR")
@@ -432,28 +463,49 @@ fun TabAuditoria(listaItens: List<ItemPatrimonio>, viewModel: MainViewModel) {
         if (mostrarDialogo) {
             AlertDialog(
                 onDismissRequest = { mostrarDialogo = false },
-                icon = { Icon(if (itemEncontrado != null) Icons.Filled.CheckCircle else Icons.Filled.Warning, contentDescription = null) },
-                title = { Text(if (itemEncontrado != null) "ENCONTRADO" else "NÃO ENCONTRADO") },
+                icon = {
+                    val isDuplicado = itemEncontrado?.localUltimaAuditoria?.contains("(DUPLICADO)") == true
+                    Icon(
+                        if (itemEncontrado != null) Icons.Filled.CheckCircle else Icons.Filled.Warning,
+                        contentDescription = null,
+                        tint = if (isDuplicado) Color(0xFFFFA000) else MaterialTheme.colorScheme.primary
+                    )
+                },
+                title = {
+                    val titulo = when {
+                        itemEncontrado == null -> "NÃO ENCONTRADO"
+                        itemEncontrado?.localUltimaAuditoria?.contains("(DUPLICADO)") == true -> "REGISTRO DUPLICADO"
+                        else -> "SUCESSO"
+                    }
+                    Text(titulo)
+                },
                 text = {
                     if (itemEncontrado != null) {
                         Column {
                             Text("TOMBO: ${itemEncontrado!!.tombo}", style = MaterialTheme.typography.titleMedium)
-                            Text("LOCAL: ${itemEncontrado!!.local}")
                             Text("DESC: ${itemEncontrado!!.descricao}")
-                            // MOSTRAR CARACTERÍSTICA NA AUDITORIA
-                            if (itemEncontrado!!.caracteristica.isNotBlank()) {
-                                Text("DETALHE: ${itemEncontrado!!.caracteristica}", style = MaterialTheme.typography.bodySmall)
-                            }
+
                             if (localAuditoria.isNotEmpty()) {
-                                Text("RASTREADO: $localAuditoria", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "SALVO EM: ${itemEncontrado!!.localUltimaAuditoria}",
+                                    color = if (itemEncontrado!!.localUltimaAuditoria!!.contains("(DUPLICADO)")) Color(0xFFFFA000) else Color(0xFF2E7D32),
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
                         }
                     } else {
-                        Text("O código ($codigoLidoSemSucesso) não está no banco.")
+                        Text("O código ($codigoLidoSemSucesso) não existe no banco de dados.")
                     }
                 },
                 confirmButton = { TextButton(onClick = { mostrarDialogo = false }) { Text("OK") } },
-                dismissButton = { TextButton(onClick = { mostrarDialogo = false; mostrarCamera = true }) { Text("LER OUTRO") } }
+                dismissButton = {
+                    TextButton(onClick = {
+                        mostrarDialogo = false
+                        jaProcessouCodigo = false
+                        mostrarCamera = true
+                    }) { Text("LER OUTRO") }
+                }
             )
         }
     }

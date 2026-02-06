@@ -77,4 +77,11 @@ class MainViewModel(private val dao: ItemPatrimonioDao) : ViewModel() {
             ))
         }
     }
+    fun salvarCopiaItem(item: ItemPatrimonio) {
+        viewModelScope.launch {
+            // Forçamos o ID ser 0 para que o Room entenda como um INSERT novo
+            // e gere um novo ID autoincrementável, mantendo o mesmo número de tombo.
+            dao.inserirItem(item.copy(id = 0))
+        }
+    }
 }
